@@ -1,17 +1,11 @@
+# server/models.py
+
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import MetaData
-from sqlalchemy.orm import validates
-from sqlalchemy.ext.associationproxy import association_proxy
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy_serializer import SerializerMixin
 
-metadata = MetaData(
-    naming_convention={
-        "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
-    }
-)
-
-db = SQLAlchemy(metadata=metadata)
-
+db = SQLAlchemy()
 
 class Restaurant(db.Model, SerializerMixin):
     __tablename__ = "restaurants"
@@ -20,16 +14,14 @@ class Restaurant(db.Model, SerializerMixin):
     name = db.Column(db.String)
     address = db.Column(db.String)
 
-    # add relationship
-    pizzas = relationship('Pizza', secondary='restaurant_pizzas', back_populates='restaurants')
+    # Define the many-to-many relationship with Pizza
+    pizzas = db.relationship('Pizza', secondary='restaurant_pizzas', back_populates='restaurants')
 
-    # add serialization rules
-
+    # Serialization rules to exclude 'restaurant_pizzas.restaurant' to avoid circular references
     serialize_rules = ('-restaurant_pizzas.restaurant',)
 
     def __repr__(self):
         return f"<Restaurant {self.name}>"
-
 
 class Pizza(db.Model, SerializerMixin):
     __tablename__ = "pizzas"
@@ -38,14 +30,14 @@ class Pizza(db.Model, SerializerMixin):
     name = db.Column(db.String)
     ingredients = db.Column(db.String)
 
-    # add relationship
-    pizzas = relationship('Pizza', secondary='restaurant_pizzas', back_populates='restaurants')
-    # add serialization rules
+    # Define the many-to-many relationship with Restaurant
+    restaurants = db.relationship('Restaurant', secondary='restaurant_pizzas', back_populates='pizzas')
+
+    # Serialization rules to exclude 'restaurant_pizzas.pizza' for the same reason
     serialize_rules = ('-restaurant_pizzas.pizza',)
 
     def __repr__(self):
         return f"<Pizza {self.name}, {self.ingredients}>"
-
 
 class RestaurantPizza(db.Model, SerializerMixin):
     __tablename__ = "restaurant_pizzas"
@@ -53,19 +45,15 @@ class RestaurantPizza(db.Model, SerializerMixin):
     id = db.Column(db.Integer, primary_key=True)
     price = db.Column(db.Integer, nullable=False)
 
-    # add relationships
+    # Define foreign keys and relationships
+    restaurant_id = db.Column(db.Integer, db.ForeignKey('restaurants.id', ondelete='CASCADE'), nullable=False)
+    restaurant = db.relationship('Restaurant', backref=db.backref('restaurant_pizzas', cascade='all, delete-orphan'))
 
-    restaurant_id = db.Column(db.Integer, ForeignKey('restaurants.id', ondelete='CASCADE'), nullable=False)
-    restaurant = relationship('Restaurant', backref=backref('restaurant_pizzas', cascade='all, delete-orphan'))
+    pizza_id = db.Column(db.Integer, db.ForeignKey('pizzas.id', ondelete='CASCADE'), nullable=False)
+    pizza = db.relationship('Pizza', backref=db.backref('restaurant_pizzas', cascade='all, delete-orphan'))
 
-    pizza_id = db.Column(db.Integer, ForeignKey('pizzas.id', ondelete='CASCADE'), nullable=False)
-    pizza = relationship('Pizza', backref=backref('restaurant_pizzas', cascade='all, delete-orphan'))
-
-
-    # add serialization rules
+    # Serialization rules to exclude 'restaurant' for this model
     serialize_rules = ('-restaurant',)
-
-    # add validation
 
     def __repr__(self):
         return f"<RestaurantPizza ${self.price}>"
